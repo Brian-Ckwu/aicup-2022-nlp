@@ -31,3 +31,76 @@ class PreprocessArgs(Args):
     def set_labeling_scheme(self, labeling_scheme: str) -> None:
         assert labeling_scheme in self.labeling_schemes
         self.labeling_scheme = labeling_scheme
+
+class FileArgs(Args):
+
+    def __init__(
+        self,
+        data_path: str,
+        split_ids_path: str,
+        save_dir: str = "./experiments"
+    ):
+        self.data_path = data_path
+        self.split_ids_path = split_ids_path
+        self.save_dir = save_dir
+        # directory style:
+        """
+            - experiments
+                - [exp_name]
+                    - config.[yml/pickle]
+                    - checkpoints
+                        - [ckpt_name].pth
+                        - ...
+                    - eval_results
+                        - [eval_name].[] # valid and test results
+                        - ...
+                    - inference_data
+                        - [eval_name].[]
+                        - ...
+        """
+
+class ModelArgs(Args):
+
+    def __init__(
+        self,
+        model_type: str, # CNN / RNN / BERT / t5 / ...
+        model_name: str, # HuggingFace model name
+    ):
+        self.model_type = model_type
+        self.model_name = model_name
+
+class OptimizationArgs(Args):
+
+    def __init__(
+        self,
+        lr: float, # learning rate
+        nepochs: int,
+        train_batch_size: int,
+        eval_batch_size: int,
+        grad_accum_steps: int,
+        optimizer: str,
+        scheduler: str,
+        stopping_strategy: str
+    ):
+        self.lr = lr
+        self.nepochs = nepochs
+        self.train_batch_size = train_batch_size
+        self.eval_batch_size = eval_batch_size
+        self.grad_accum_steps = grad_accum_steps
+        self.optimzier = optimizer
+        self.scheduler = scheduler
+        self.stoppping_strategy = stopping_strategy
+
+class ExperimentArgs(Args):
+
+    def __init__(
+        self,
+        file_args: FileArgs,
+        preprocess_args: PreprocessArgs,
+        model_args: ModelArgs,
+        opt_args: OptimizationArgs
+    ):
+        self.file_args = file_args
+        self.preprocess_args = preprocess_args
+        self.model_args = model_args
+        self.opt_args = opt_args
