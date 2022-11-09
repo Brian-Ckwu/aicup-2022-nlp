@@ -15,6 +15,13 @@ class Preprocessor(object):
         "AGREE": 0,
         "DISAGREE": 1
     }
+    scheme2tags = {
+        "IO1": {"O": 0, "I": 1},
+        "IO2": {"O": 0, "I-q": 1, "I-r": 2},
+        "BIO1": {"O": 0, "B": 1, "I": 2},
+        "BIO2": {"O": 0, "B-q": 1, "I-q": 2, "B-r": 3, "I-r": 4}
+    }
+    ignore_index_symbol = 'X'
     ignore_index = -100
 
     def __init__(self, args: PreprocessArgs):
@@ -86,28 +93,102 @@ class Preprocessor(object):
         sepid = self.model_tokenizer.sep_token_id
         
         qr = [clsid] + q + [sepid] + r + [sepid]
-        # handle labeling scheme - 1/2
-        if self.args.labeling_scheme[-1] == '2': # use separate labels for the second sequence
-            rp = self.add_labels_by_two(rp)
-        qprp = [self.ignore_index] + qp + [self.ignore_index] + rp + [self.ignore_index]
+        # handle labeling scheme
+        qprp = getattr(self, f"to_{self.args.labeling_scheme}_scheme")(qp, rp)
 
         # handle input scheme
         X = qr
         if self.args.input_scheme == "qrs": # append s -> [CLS] q [SEP] r [SEP] s [SEP]
             X += [self.model_tokenizer.convert_tokens_to_ids(s.lower()), sepid] # lowercased
-            qprp += [self.ignore_index, self.ignore_index]
-
-        # handle labeling scheme - IO/BIO
-        y_seq = qprp
-        if self.args.labeling_scheme[:-1] == "BIO":
-            y_seq = self.add_B_to_labels(y_seq)
+            qprp += [self.ignore_index_symbol] * 2
 
         # handle output scheme
+        y_seq = self.to_int_seq(qprp) # convert BIO tagging to integer labels
         if self.args.output_scheme == "sq'r'":
             y_cls = self.s2id[s]
             return X, (y_cls, y_seq)
         return X, y_seq
 
+    def to_IO1_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # "IO1": {"O": 0, "I": 1}
+        nqp = ['O'] * len(qp)
+        nrp = ['O'] * len(rp)
+
+        for new_seq, ori_seq in [[nqp, qp], [nrp, rp]]:
+            for i in range(len(ori_seq)):
+                if ori_seq[i] == 1:
+                    new_seq[i] = 'I'
+
+        return self.add_ignores(nqp, nrp)
+
+    def to_IO2_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # O, I-q, I-r
+        nqp = ['O'] * len(qp)
+        nrp = ['O'] * len(rp)
+
+        for seq_id, (new_seq, ori_seq) in enumerate([[nqp, qp], [nrp, rp]]):
+            label = "I-q" if seq_id == 0 else "I-r"
+            for i in range(len(ori_seq)):
+                if ori_seq[i] == 1:
+                    new_seq[i] = label                
+
+        return self.add_ignores(nqp, nrp)
+
+    def to_BIO1_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # O, B, I
+        nqp = ['O'] * len(qp)
+        nrp = ['O'] * len(rp)
+
+        for new_seq, ori_seq in [[nqp, qp], [nrp, rp]]:
+            in_span = False
+            for i in range(len(ori_seq)):
+                if in_span:
+                    if ori_seq[i] == 0:
+                        in_span = False
+                    else: # ori_seq[i] == 1
+                        new_seq[i] = 'I'
+                else: # previously not in span
+                    if ori_seq[i] == 1:
+                        new_seq[i] = 'B'
+                        in_span = True
+
+        return self.add_ignores(nqp, nrp)
+
+    def to_BIO2_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # O, B-q, I-q, B-r, I-r
+        nqp = ['O'] * len(qp)
+        nrp = ['O'] * len(rp)        
+        
+        for seq_id, (new_seq, ori_seq) in enumerate([[nqp, qp], [nrp, rp]]):
+            seq_symbol = 'q' if seq_id == 0 else 'r'
+            B = f"B-{seq_symbol}"
+            I = f"I-{seq_symbol}"
+            in_span = False
+            for i in range(len(ori_seq)):
+                if in_span:
+                    if ori_seq[i] == 0:
+                        in_span = False
+                    else: # ori_seq[i] == 1
+                        new_seq[i] = I
+                else: # previously not in span
+                    if ori_seq[i] == 1:
+                        new_seq[i] = B
+                        in_span = True
+
+        return self.add_ignores(nqp, nrp)                    
+
+    def to_int_seq(self, seq: List[str]) -> List[int]:
+        nseq = [0] * len(seq) # default to a sequence of ['O']
+        for i in range(len(seq)):
+            sym = seq[i]
+            if sym == self.ignore_index_symbol:
+                nseq[i] = self.ignore_index
+            else:
+                nseq[i] = self.scheme2tags[self.args.labeling_scheme][sym]
+
+        return nseq
+
+    @staticmethod
+    def add_ignores(seq1: List[str], seq2: List[str]) -> List[str]:
+        return ['X'] + seq1 + ['X'] + seq2 + ['X']
+
+    # Deprecated functions
     @staticmethod
     def add_labels_by_two(seq: List[int]) -> List[int]:
         new_seq = seq.copy()
