@@ -103,11 +103,11 @@ class Preprocessor(object):
             qprp += [self.ignore_index_symbol] * 2
 
         # handle output scheme
+        y_cls = self.ignore_index # unify the return values
         y_seq = self.to_int_seq(qprp) # convert BIO tagging to integer labels
         if self.args.output_scheme == "sq'r'":
             y_cls = self.s2id[s]
-            return X, (y_cls, y_seq)
-        return X, y_seq
+        return X, (y_cls, y_seq)
 
     def to_IO1_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # "IO1": {"O": 0, "I": 1}
         nqp = ['O'] * len(qp)
