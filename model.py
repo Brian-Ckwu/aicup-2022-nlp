@@ -15,7 +15,7 @@ class BertEncoderNet(nn.Module):
         self.bert = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.bert.embeddings.word_embeddings.embedding_dim
         self.fc_cls = nn.Linear(self.embed_dim, 2) # 0 == AGREE / 1 == DISAGREE
-        self.fc_seq = nn.Linear(self.embed_dim, )
+        self.fc_seq = nn.Linear(self.embed_dim, num_tags)
 
     def forward(self, x) -> tuple:
         h_last = self.bert(**x).last_hidden_state
