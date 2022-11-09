@@ -3,6 +3,7 @@ from typing import List, Tuple, Any, Union
 import nltk
 
 import numpy as np
+import pandas as pd
 from transformers import AutoTokenizer
 
 from utils import longestCommonSubsequence
@@ -20,6 +21,29 @@ class Preprocessor(object):
         self.args = args
         self.model_tokenizer = AutoTokenizer.from_pretrained(args.model_tokenizer_name)
 
+    # TODO: how to design the default preprocessing function?
+    def __call__(self, data: pd.DataFrame) -> pd.DataFrame: # converted DataFrame consists of X & y
+        ids = data.id
+        Q, R, S, QP, RP = [data[field] for field in ["q", "r", "s", "q'", "r'"]]
+        # Tokenization of (q, r, q', r')
+        if self.args.use_nltk: # TODO: debugging of LCS unmatch
+            Q, R, QP, RP = [list(map(' '.join, map(self.nltk_tokenize, x))) for x in [Q, R, QP, RP]]
+        Q, R, QP, RP = [list(map(self.model_tokenize, x)) for x in [Q, R, QP, RP]]
+
+        # Ground truth sequence labeling
+        QP, RP = [list(map(self.label_sequence, ref, ans)) for ref, ans in [[Q, QP], [R, RP]]]
+
+        # Format the data
+        X, y = zip(*list(map(self.format_data, Q, R, S, QP, RP)))
+
+        # Construct the preprocessed DataFrame
+        pdf = pd.DataFrame(data={
+            "id": ids,
+            "X": X,
+            "y": y
+        })
+        return pdf
+
     def set_args(self, args: PreprocessArgs):
         self.args = args
     
@@ -27,7 +51,7 @@ class Preprocessor(object):
         tokens = nltk.tokenize.word_tokenize(text)
         if filter_puncts:
             tokens = list(filter(lambda t: t not in self.punctuations, tokens))
-        return tokens
+        return tokens[1:-1] # NOTE: remove the quotes
 
     def model_tokenize(self, text: str) -> List[int]:
         text = text.strip('"')
