@@ -1,3 +1,5 @@
+from transformers import TrainingArguments
+
 class Args(object):
     pass
 
@@ -65,9 +67,11 @@ class ModelArgs(Args):
         self,
         model_type: str, # CNN / RNN / BERT / t5 / ...
         model_name: str, # HuggingFace model name
+        checkpoint: str, # preivously trained checkpoint
     ):
         self.model_type = model_type
         self.model_name = model_name
+        self.checkpoint = checkpoint
 
 class OptimizationArgs(Args):
 
@@ -98,9 +102,9 @@ class ExperimentArgs(Args):
         file_args: FileArgs,
         preprocess_args: PreprocessArgs,
         model_args: ModelArgs,
-        opt_args: OptimizationArgs
+        train_args: TrainingArguments
     ):
         self.file_args = file_args
         self.preprocess_args = preprocess_args
         self.model_args = model_args
-        self.opt_args = opt_args
+        self.train_args = train_args
