@@ -42,7 +42,10 @@ class BertEncoderNetDataset(Dataset):
         }
         batch_y_cls_l = torch.LongTensor(y_cls_l)
         batch_y_seq_l = torch.LongTensor(y_seq_l)
-        return batch_X, (batch_y_cls_l, batch_y_seq_l)
+        return {
+            'X': batch_X,
+            'y': (batch_y_cls_l, batch_y_seq_l)
+        }
     
     def pad_and_truncate(self, seq_l: List[List[int]], pad_id: int, eos_id: int = None) -> List[List[int]]:
         new_seq_l = list()
