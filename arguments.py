@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 
 from transformers import TrainingArguments
@@ -114,6 +116,13 @@ class MyTrainingArguments(TrainingArguments):
     def n_gpu(self) -> int:
         return 1
 
+@dataclass
+class WAndBArgs(object):
+    project: str
+    name: str
+    tags: List[str]
+    group: str
+
 class ExperimentArgs(Args):
 
     def __init__(
@@ -121,9 +130,11 @@ class ExperimentArgs(Args):
         file_args: FileArgs,
         preprocess_args: PreprocessArgs,
         model_args: ModelArgs,
-        train_args: MyTrainingArguments
+        train_args: MyTrainingArguments,
+        wandb_args: WAndBArgs
     ):
         self.file_args = file_args
         self.preprocess_args = preprocess_args
         self.model_args = model_args
         self.train_args = train_args
+        self.wandb_args = wandb_args

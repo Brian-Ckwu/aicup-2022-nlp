@@ -27,9 +27,9 @@ class BertEncoderNetTrainer(Trainer):
             pin_memory=True
         )
 
-    def log(self, logs: dict):
-        # wandb.log
-        print(logs)
+    # def log(self, logs: dict):
+    #     # wandb.log
+    #     print(logs)
 
     def compute_loss(self, model: BertEncoderNet, inputs: dict, return_outputs: bool = False): # inputs: {'X': BatchEncodings, 'y': (y_cls, y_seq)}
         logits_cls, logits_seq = model(inputs['X'])
