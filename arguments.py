@@ -1,4 +1,7 @@
+import torch
+
 from transformers import TrainingArguments
+from dataclasses import dataclass
 
 class Args(object):
     pass
@@ -73,6 +76,8 @@ class ModelArgs(Args):
     ):
         self.model_type = model_type
         self.model_name = model_name
+        self.w_loss_cls = w_loss_cls
+        self.w_loss_seq = w_loss_seq
         self.checkpoint = checkpoint
 
 class OptimizationArgs(Args):
@@ -97,6 +102,18 @@ class OptimizationArgs(Args):
         self.scheduler = scheduler
         self.stoppping_strategy = stopping_strategy
 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+    device_str: str = "cpu"
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device(self.device_str)
+    
+    @property
+    def n_gpu(self) -> int:
+        return 1
+
 class ExperimentArgs(Args):
 
     def __init__(
@@ -104,7 +121,7 @@ class ExperimentArgs(Args):
         file_args: FileArgs,
         preprocess_args: PreprocessArgs,
         model_args: ModelArgs,
-        train_args: TrainingArguments
+        train_args: MyTrainingArguments
     ):
         self.file_args = file_args
         self.preprocess_args = preprocess_args
