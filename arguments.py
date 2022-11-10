@@ -67,6 +67,8 @@ class ModelArgs(Args):
         self,
         model_type: str, # CNN / RNN / BERT / t5 / ...
         model_name: str, # HuggingFace model name
+        w_loss_cls: float,
+        w_loss_seq: float,
         checkpoint: str, # preivously trained checkpoint
     ):
         self.model_type = model_type
