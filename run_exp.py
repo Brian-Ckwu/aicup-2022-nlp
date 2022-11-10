@@ -7,7 +7,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import pandas as pd
 
-from utils import load_json
+from utils import load_json, compute_metrics_funcs
 from model import BertEncoderNet
 from data import BertEncoderNetDataset
 from trainer import BertEncoderNetTrainer
@@ -64,6 +64,7 @@ class Experiment(object):
             data_collator=train_dataset.collate_fn,
             train_dataset=train_dataset,
             eval_dataset=valid_dataset,
+            compute_metrics=compute_metrics_funcs[self.args.train_args.my_eval_metric_in_training]
         )
         trainer.train()
 
@@ -74,14 +75,14 @@ class Experiment(object):
         return
 
 # Experiment Arguments
-exp_name = "debug_run_no_custom_log"
+exp_name = "debug_run_for_token_acc"
 exp_args = ExperimentArgs(
     file_args=FileArgs(
         data_path="./dataset/train.csv",
         split_ids_path="./dataset/splitIds__splitBy-id_stratifyBy-s_train-0.6_valid-0.2_test-0.2_seed-42.json"
     ),
     preprocess_args=PreprocessArgs(
-        use_nltk=True,
+        use_nltk=False,
         model_tokenizer_name="bert-base-uncased",
         input_scheme="qr",
         output_scheme="q'r'",
@@ -105,7 +106,9 @@ exp_args = ExperimentArgs(
         seed=42,
 
         evaluation_strategy="epoch",
+        logging_first_step=True, # NOTE: evaluate at the first global step
         eval_steps=None,
+        my_eval_metric_in_training="token_acc",
         logging_strategy="epoch",
         logging_first_step=True,
         output_dir=f"./experiments/{exp_name}",

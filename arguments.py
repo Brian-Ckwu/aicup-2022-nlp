@@ -106,6 +106,7 @@ class OptimizationArgs(Args):
 
 @dataclass
 class MyTrainingArguments(TrainingArguments):
+    my_eval_metric_in_training: str = "token_acc"
     device_str: str = "cpu"
 
     @property
