@@ -6,8 +6,21 @@ import numpy as np
 import pandas as pd
 from transformers import AutoTokenizer
 
-from utils import longestCommonSubsequence
 from arguments import PreprocessArgs
+
+def longestCommonSubsequence(text1: list, text2: list) -> int:
+    if len(text2) > len(text1):
+        text1, text2 = text2, text1
+
+    lcs = [[0] * (len(text2) + 1) for _ in range(2)]
+    for i in range(1, len(text1)+1):
+        for j in range(1, len(text2)+1):
+            if text1[i-1] == text2[j-1]:
+                lcs[i % 2][j] = lcs[(i-1) % 2][j-1] + 1
+            else:
+                lcs[i % 2][j] = max(lcs[(i-1) % 2][j], lcs[i % 2][j-1])
+
+    return lcs[len(text1) % 2][len(text2)]
 
 class Preprocessor(object):
     punctuations = set([ch for ch in "!\"#$%&'()*+, -./:;<=>?@[\]^_`{|}~"])
@@ -33,7 +46,7 @@ class Preprocessor(object):
         ids = data.id
         Q, R, S, QP, RP = [data[field] for field in ["q", "r", "s", "q'", "r'"]]
         # Tokenization of (q, r, q', r')
-        if self.args.use_nltk: # TODO: debugging of LCS unmatch
+        if self.args.use_nltk:
             Q, R, QP, RP = [list(map(' '.join, map(self.nltk_tokenize, x))) for x in [Q, R, QP, RP]]
         Q, R, QP, RP = [list(map(self.model_tokenize, x)) for x in [Q, R, QP, RP]]
 
@@ -54,11 +67,13 @@ class Preprocessor(object):
     def set_args(self, args: PreprocessArgs):
         self.args = args
     
+    @classmethod # class method for convenience
     def nltk_tokenize(self, text: str, filter_puncts: bool = True) -> List[str]:
+        text = text.strip('"') # NOTE: remove the quotes first
         tokens = nltk.tokenize.word_tokenize(text)
         if filter_puncts:
             tokens = list(filter(lambda t: t not in self.punctuations, tokens))
-        return tokens[1:-1] # NOTE: remove the quotes
+        return tokens
 
     def model_tokenize(self, text: str) -> List[int]:
         text = text.strip('"')
