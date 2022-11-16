@@ -39,6 +39,8 @@ def longestCommonSubsequence(text1: list, text2: list) -> int:
 def compute_lcs_score(pred: list, ans: list) -> float:
     intersection = longestCommonSubsequence(pred, ans)
     union = len(pred) + len(ans) - intersection
+    if union == 0:
+        raise ValueError(f"Union of {pred} and {ans} is zero")
     lcs_score = intersection / union
     if (lcs_score < 0) or (lcs_score) > 1:
         raise ValueError("LCS score must be between 0 and 1")
