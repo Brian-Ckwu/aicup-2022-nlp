@@ -27,8 +27,8 @@ def parse_args() -> Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
-    pred_df = pd.read_csv(args.prediction, names=["id", "q'", "r'"])
-    ans_df = pd.read_csv(args.answer, names=["id", "q'", "r'"])
+    pred_df = pd.read_csv(args.prediction, names=["id", "q'", "r'"], dtype=str)
+    ans_df = pd.read_csv(args.answer, names=["id", "q'", "r'"], dtype=str)
     if len(pred_df) != len(ans_df.groupby("id").size()):
         raise ValueError("The prediction file must have the same number of rows as the number of unique IDs in the answer file")
     
