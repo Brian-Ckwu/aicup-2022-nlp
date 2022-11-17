@@ -43,19 +43,18 @@ class Preprocessor(object):
 
     # TODO: how to design the default preprocessing function?
     def __call__(self, data: pd.DataFrame) -> pd.DataFrame: # converted DataFrame consists of X & y
+        data.loc[:, ["q", "r", "s", "q'", "r'"]] = data[["q", "r", "s", "q'", "r'"]].applymap(lambda s: s.strip('"'))
         ids = data.id
-        Q, R, S, QP, RP = [data[field] for field in ["q", "r", "s", "q'", "r'"]]
+        Q_raw, R_raw, S, QP_raw, RP_raw = [data[field] for field in ["q", "r", "s", "q'", "r'"]]
         # Tokenization of (q, r, q', r')
         if self.args.use_nltk:
-            Q, R, QP, RP = [list(map(' '.join, map(self.nltk_tokenize, x))) for x in [Q, R, QP, RP]]
-        Q, R, QP, RP = [list(map(self.model_tokenize, x)) for x in [Q, R, QP, RP]]
+            Q, R = [list(map(' '.join, map(self.nltk_tokenize, x))) for x in [Q_raw, R_raw]]
+        Q, R = [list(map(self.model_tokenize, x)) for x in [Q_raw, R_raw]]
         Q, Q_offsets = zip(*Q)
         R, R_offsets = zip(*R)
-        QP, _ = zip(*QP)
-        RP, _ = zip(*RP)
 
         # Ground truth sequence labeling
-        QP, RP = [list(map(self.label_sequence, ref, ans)) for ref, ans in [[Q, QP], [R, RP]]]
+        QP, RP = [list(map(self.label_sequence, ref, ans, ref_offsets)) for ref, ans, ref_offsets in [[Q_raw, QP_raw, Q_offsets], [R_raw, RP_raw, R_offsets]]]
 
         # Format the data
         X, X_offsets, y = zip(*list(map(self.format_data, Q, Q_offsets, R, R_offsets, S, QP, RP)))
@@ -88,23 +87,65 @@ class Preprocessor(object):
         return token_ids[1:-1], offsets[1:-1] # NOTE: remove the first and the last token (e.g., the [CLS] token and the [SEP] token in BERT's tokenizer)
     
     # TODO: optimzie this function (problem: non-consecutive span, problematic sample: index == 11 of (q, q') pair)
-    def label_sequence(self, ref: List[Any], ans: List[Any]) -> List[int]:
-        # check if LCS(ref, ans) = |ans|
-        assert longestCommonSubsequence(ref, ans) == len(ans)
+    # def label_sequence_old(self, ref: List[Any], ans: List[Any]) -> List[int]:
+    #     # check if LCS(ref, ans) = |ans|
+    #     if longestCommonSubsequence(ref, ans) != len(ans):
+    #         print(f"Reference sequence (len={len(ref)}): {ref}")
+    #         print(f"Answer sequence (len={len(ans)}): {ans}")
 
-        # label the reference sequence based on the answer sequence by two pointers
-        i = 0
-        j = 0
-        labels = [0] * len(ref)
-        while (j < len(ans)):
-            if ref[i] == ans[j]:
-                labels[i] = 1
-                i += 1
-                j += 1
-            else:
-                i += 1
+    #     # label the reference sequence based on the answer sequence by two pointers
+    #     i = 0
+    #     j = 0
+    #     labels = [0] * len(ref)
+    #     while (j < len(ans)):
+    #         if ref[i] == ans[j]:
+    #             labels[i] = 1
+    #             i += 1
+    #             j += 1
+    #         else:
+    #             i += 1
         
-        assert (np.array(ref)[np.array(labels).astype(bool)] == np.array(ans)).all()
+    #     assert (np.array(ref)[np.array(labels).astype(bool)] == np.array(ans)).all()
+    #     return labels
+
+    @staticmethod
+    def get_labeled_span_indices(ref: str, ans: str) -> List[List[int]]:
+        s = 0
+        e = len(ans)
+        spans = list()
+        while (s < len(ans)):
+            cur_span = ans[s:e]
+            span_s = ref.find(cur_span)
+            if (span_s != -1):
+                spans.append([span_s, span_s + len(cur_span)])
+                s = e
+                e = len(ans)
+            else:
+                e = e - 1
+        return spans
+
+    def label_sequence(self, ref: str, ans: str, ref_offsets: List[Tuple[int]]):
+        labels = [0] * len(ref_offsets)
+        labeled_spans = self.get_labeled_span_indices(ref, ans)
+
+        if not labeled_spans:
+            return labels
+
+        cur = 0
+        for i in range(len(ref_offsets)):
+            cur_labeled_span = labeled_spans[cur]
+            ref_offset = ref_offsets[i]
+            if (cur_labeled_span[0] <= ref_offset[0]) and (ref_offset[1] <= cur_labeled_span[1]): # if the ref_offset is in the current labeled span
+                labels[i] = 1
+            elif (ref_offset[0] < cur_labeled_span[0]): # if the ref_offset is to the left of current labeled span
+                pass # do nothing
+            elif (ref_offset[1] > cur_labeled_span[1]):
+                cur += 1
+                if cur >= len(labeled_spans):
+                    break
+            else:
+                raise Exception("This condition should be happen.")
+
         return labels
 
     def format_data(
