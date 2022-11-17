@@ -2,10 +2,9 @@ from typing import List, Tuple
 
 import torch
 
-class Postprocessor(object):
+from data import BertEncoderNetDataset
 
-    def __init__(self, model_tokenizer):
-        self.model_tokenizer = model_tokenizer
+class Postprocessor(object):
 
     @staticmethod
     def aggregate_dataset_inputs(dataset):
@@ -43,7 +42,14 @@ class Postprocessor(object):
             m_offsets.append(span)
         return m_offsets
 
-    def return_output_sents(self, raw_eval_data, eval_token_ids_l, offsets_l, pred_token_mask_l):
+    @classmethod
+    def predict_sents(self, dataset: BertEncoderNetDataset, pred_token_mask_l: torch.tensor):
+        grouped_r_data = dataset.r_data.groupby("id").first()
+        grouped_p_data = dataset.p_data.groupby("id").first()
+        raw_eval_data = grouped_r_data
+        eval_token_ids_l = self.aggregate_dataset_inputs(dataset)
+        offsets_l = grouped_p_data.X_offsets
+
         assert len(raw_eval_data) == len(eval_token_ids_l) == len(offsets_l) == len(pred_token_mask_l)
         qp_sents, rp_sents = list(), list()
 
@@ -55,7 +61,7 @@ class Postprocessor(object):
             offsets = offsets_l.iloc[i]
             mask = pred_token_mask_l[i]
 
-            sep_locs = torch.nonzero(token_ids == self.model_tokenizer.sep_token_id).flatten()
+            sep_locs = torch.nonzero(token_ids == dataset.preprocessor.model_tokenizer.sep_token_id).flatten()
             qp_offsets = self.merge_offsets(offsets, mask, window=(1, sep_locs[0]))
             if len(sep_locs) >= 2:
                 rp_offsets = self.merge_offsets(offsets, mask, window=(sep_locs[0] + 1, sep_locs[1]))
@@ -69,7 +75,7 @@ class Postprocessor(object):
             rp_sents.append('"' + rp_sent + '"')
         
         pred_sents = {
-            'q': qp_sents,
-            'r': rp_sents
+            "q'": qp_sents,
+            "r'": rp_sents
         }
         return pred_sents
