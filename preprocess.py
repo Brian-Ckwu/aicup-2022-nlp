@@ -49,17 +49,22 @@ class Preprocessor(object):
         if self.args.use_nltk:
             Q, R, QP, RP = [list(map(' '.join, map(self.nltk_tokenize, x))) for x in [Q, R, QP, RP]]
         Q, R, QP, RP = [list(map(self.model_tokenize, x)) for x in [Q, R, QP, RP]]
+        Q, Q_offsets = zip(*Q)
+        R, R_offsets = zip(*R)
+        QP, _ = zip(*QP)
+        RP, _ = zip(*RP)
 
         # Ground truth sequence labeling
         QP, RP = [list(map(self.label_sequence, ref, ans)) for ref, ans in [[Q, QP], [R, RP]]]
 
         # Format the data
-        X, y = zip(*list(map(self.format_data, Q, R, S, QP, RP)))
+        X, X_offsets, y = zip(*list(map(self.format_data, Q, Q_offsets, R, R_offsets, S, QP, RP)))
 
         # Construct the preprocessed DataFrame
         pdf = pd.DataFrame(data={
             "id": ids,
             "X": X,
+            "X_offsets": X_offsets,
             "y": y
         })
         return pdf
@@ -77,8 +82,10 @@ class Preprocessor(object):
 
     def model_tokenize(self, text: str) -> List[int]:
         text = text.strip('"')
-        token_ids = self.model_tokenizer(text)["input_ids"]
-        return token_ids[1:-1] # NOTE: remove the first and the last token (e.g., the [CLS] token and the [SEP] token in BERT's tokenizer)
+        be = self.model_tokenizer(text, return_offsets_mapping=True)
+        token_ids = be["input_ids"]
+        offsets = be["offset_mapping"]
+        return token_ids[1:-1], offsets[1:-1] # NOTE: remove the first and the last token (e.g., the [CLS] token and the [SEP] token in BERT's tokenizer)
     
     # TODO: optimzie this function (problem: non-consecutive span, problematic sample: index == 11 of (q, q') pair)
     def label_sequence(self, ref: List[Any], ans: List[Any]) -> List[int]:
@@ -100,21 +107,34 @@ class Preprocessor(object):
         assert (np.array(ref)[np.array(labels).astype(bool)] == np.array(ans)).all()
         return labels
 
-    def format_data(self, q: List[int], r: List[int], s: str, qp: List[int], rp: List[int]) -> Tuple[List[int], Union[List[int], Tuple[int, List[int]]]]:
+    def format_data(
+        self, 
+        q: List[int], 
+        q_offsets: List[Tuple[int]],
+        r: List[int], 
+        r_offsets: List[Tuple[int]],
+        s: str, 
+        qp: List[int], 
+        rp: List[int]
+    ) -> Tuple[List[int], Union[List[int], Tuple[int, List[int]]]]:
         assert (len(q) == len(qp)) and (len(r) == len(rp))
         
         # TODO: adapt to other model type
         clsid = self.model_tokenizer.cls_token_id
         sepid = self.model_tokenizer.sep_token_id
+        nofst = [(0, 0)]
         
         qr = [clsid] + q + [sepid] + r + [sepid]
+        qoro = nofst + q_offsets + nofst + r_offsets
         # handle labeling scheme
         qprp = getattr(self, f"to_{self.args.labeling_scheme}_scheme")(qp, rp)
 
         # handle input scheme
         X = qr
+        X_offsets = qoro
         if self.args.input_scheme == "qrs": # append s -> [CLS] q [SEP] r [SEP] s [SEP]
             X += [self.model_tokenizer.convert_tokens_to_ids(s.lower()), sepid] # lowercased
+            X_offsets += nofst * 2
             qprp += [self.ignore_index_symbol] * 2
 
         # handle output scheme
@@ -122,7 +142,7 @@ class Preprocessor(object):
         y_seq = self.to_int_seq(qprp) # convert BIO tagging to integer labels
         if self.args.output_scheme == "sq'r'":
             y_cls = self.s2id[s]
-        return X, (y_cls, y_seq)
+        return X, X_offsets, (y_cls, y_seq)
 
     def to_IO1_scheme(self, qp: List[int], rp: List[int]) -> List[str]: # "IO1": {"O": 0, "I": 1}
         nqp = ['O'] * len(qp)
