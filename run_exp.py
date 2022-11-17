@@ -5,7 +5,12 @@ import os
 import wandb
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+import itertools
+from pathlib import Path
+
 import pandas as pd
+from transformers import logging
+logging.set_verbosity_error()
 
 from utils import load_json, compute_metrics_funcs
 from model import BertEncoderNet
@@ -29,29 +34,23 @@ class Experiment(object):
             w_loss_cls=args.model_args.w_loss_cls,
             w_loss_seq=args.model_args.w_loss_seq
         )
-        wandb.init(**vars(args.wandb_args))
+        self.wandb_run = wandb.init(reinit=True, **vars(args.wandb_args))
 
     def run(self, debug_mode: bool): # debug_mode --> forward a small proportion of samples (e.g., 10 - 100)
         # Load data
         data = pd.read_csv(self.args.file_args.data_path).drop(["Unnamed: 6", "total no.: 7987"], axis=1)
         if debug_mode:
             data = data[:self.debug_nsamples]
-        
-        # Preprocess data (tokenization, sequence labeling, and formatting)
-        print("Preprocessing the data...") # TODO: change to logging
-        p_data = self.preprocessor(data)
 
         # Split into train/valid/test by ID
-        train_data, valid_data, test_data = [p_data[p_data.id.isin(self.split_ids[split])] for split in ["train", "valid", "test"]]
+        train_data, valid_data, test_data = [data[data.id.isin(self.split_ids[split])] for split in ["train", "valid", "test"]]
         print(f"Sample size: train = {len(train_data)} / valid = {len(valid_data)} / test = {len(test_data)}")
         
         # Make datasets
-        train_dataset, valid_dataset, test_dataset = [
-            BertEncoderNetDataset(
-                p_data=split_data, 
-                tokenizer=self.preprocessor.model_tokenizer
-            ) for split_data in [train_data, valid_data, test_data]
-        ]
+        print("Building datasets...")
+        train_dataset = BertEncoderNetDataset(r_data=train_data, preprocessor=self.preprocessor)
+        valid_dataset = BertEncoderNetDataset(r_data=valid_data, preprocessor=self.preprocessor, do_eval=True) # do_eval -> group IDs
+        print(f"Dataset size: train = {len(train_dataset)} / valid = {len(valid_dataset)}")
 
         # TODO: Load model (if resume from a previously trained checkpoint)
         if self.args.model_args.checkpoint:
@@ -66,16 +65,20 @@ class Experiment(object):
             eval_dataset=valid_dataset,
             compute_metrics=compute_metrics_funcs[self.args.train_args.my_eval_metric_in_training]
         )
+        trainer.evaluate() # evaluate before any training
         trainer.train()
 
-        # Testing
+        # TODO: Testing
             # post-processing
             # LCS
 
-        return
+        self.wandb_run.summary["best_agg_lcs_score"] = trainer.state.best_metric
+        self.wandb_run.finish()
+        print(f"===== Best model checkpoint: {trainer.state.best_model_checkpoint} =====")
+        (Path(self.args.train_args.output_dir) / "best_model_checkpoint.txt").write_text(trainer.state.best_model_checkpoint)
 
 # Experiment Arguments
-exp_name = "debug_run_for_token_acc"
+exp_name = "debug_run_for_save_ckpt"
 exp_args = ExperimentArgs(
     file_args=FileArgs(
         data_path="./dataset/train.csv",
@@ -84,7 +87,7 @@ exp_args = ExperimentArgs(
     preprocess_args=PreprocessArgs(
         use_nltk=False,
         model_tokenizer_name="bert-base-uncased",
-        input_scheme="qr",
+        input_scheme="qrs",
         output_scheme="q'r'",
         labeling_scheme="IO1"
     ),
@@ -106,22 +109,23 @@ exp_args = ExperimentArgs(
         seed=42,
 
         evaluation_strategy="epoch",
-        logging_first_step=True, # NOTE: evaluate at the first global step
-        eval_steps=None,
+        # eval_steps=20,
         my_eval_metric_in_training="token_acc",
         logging_strategy="epoch",
         logging_first_step=True,
+        # logging_steps=20,
         output_dir=f"./experiments/{exp_name}",
         overwrite_output_dir=True, # NOTE
         save_strategy="epoch",
         save_total_limit=5,
+        # save_on_each_node=True,
 
         fp16=False,
-        load_best_model_at_end=False,
-        metric_for_best_model=None,
-        greater_is_better=None,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_agg_lcs_score",
+        greater_is_better=True,
         
-        device_str="cuda:1",
+        device_str="cuda:0",
     ),
     wandb_args=WAndBArgs(
         project="aicup",
@@ -130,7 +134,6 @@ exp_args = ExperimentArgs(
         group="bert"
     ),
 )
-
 
 if __name__ == "__main__":
     exp = Experiment(exp_args)
