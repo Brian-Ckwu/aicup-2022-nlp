@@ -4,14 +4,15 @@ import pandas as pd
 
 import torch
 from torch.utils.data import Dataset
-from transformers import BertTokenizerFast
+from preprocess import Preprocessor
 
 class BertEncoderNetDataset(Dataset):
     ignore_index = -100
 
-    def __init__(self, p_data: pd.DataFrame, tokenizer: BertTokenizerFast): # p_data: preprocessed data
-        self.p_data = p_data
-        self.tokenizer = tokenizer
+    def __init__(self, r_data: pd.DataFrame, preprocessor: Preprocessor): # r_data: raw data
+        self.r_data = r_data
+        self.p_data = preprocessor(r_data)
+        self.preprocessor = preprocessor
 
     def __len__(self):
         return len(self.p_data)
@@ -30,7 +31,7 @@ class BertEncoderNetDataset(Dataset):
             y_seq_l.append(y_seq)
 
         # Pad X_l and y_seq_l
-        X_l = self.pad_and_truncate(X_l, pad_id=self.tokenizer.pad_token_id, eos_id=self.tokenizer.sep_token_id)
+        X_l = self.pad_and_truncate(X_l, pad_id=self.preprocessor.model_tokenizer.pad_token_id, eos_id=self.preprocessor.model_tokenizer.sep_token_id)
         y_seq_l = self.pad_and_truncate(y_seq_l, pad_id=self.ignore_index)
 
         # Make token_type_ids masks & attention masks
@@ -49,7 +50,7 @@ class BertEncoderNetDataset(Dataset):
     
     def pad_and_truncate(self, seq_l: List[List[int]], pad_id: int, eos_id: int = None) -> List[List[int]]:
         new_seq_l = list()
-        max_len = min(self.tokenizer.model_max_length, max([len(seq) for seq in seq_l]))
+        max_len = min(self.preprocessor.model_tokenizer.model_max_length, max([len(seq) for seq in seq_l]))
         for seq in seq_l:
             if len(seq) > max_len: # truncate
                 new_seq = seq[:max_len - 1] + [eos_id if eos_id is not None else pad_id]
@@ -63,13 +64,13 @@ class BertEncoderNetDataset(Dataset):
 
     def make_token_type_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         token_type_ids = torch.zeros(size=input_ids.size()).long()
-        segb_locs = (input_ids == self.tokenizer.sep_token_id).int().argmax(dim=1) + 1
+        segb_locs = (input_ids == self.preprocessor.model_tokenizer.sep_token_id).int().argmax(dim=1) + 1
         for i in range(len(segb_locs)):
             token_type_ids[i].index_fill_(dim=-1, index=torch.arange(segb_locs[i], token_type_ids.size(1)), value=1)
         return token_type_ids
     
     def make_attention_mask(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         attention_mask = torch.ones(size=input_ids.size()).long()
-        padding_locs = (input_ids == self.tokenizer.pad_token_id).int()
+        padding_locs = (input_ids == self.preprocessor.model_tokenizer.pad_token_id).int()
         attention_mask += padding_locs * -1
         return attention_mask
