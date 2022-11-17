@@ -9,9 +9,9 @@ from preprocess import Preprocessor
 class BertEncoderNetDataset(Dataset):
     ignore_index = -100
 
-    def __init__(self, r_data: pd.DataFrame, preprocessor: Preprocessor): # r_data: raw data
+    def __init__(self, r_data: pd.DataFrame, preprocessor: Preprocessor, do_eval: bool = False): # r_data: raw data
         self.r_data = r_data
-        self.p_data = preprocessor(r_data)
+        self.p_data = preprocessor(r_data.groupby("id").sample() if do_eval else r_data)
         self.preprocessor = preprocessor
 
     def __len__(self):
