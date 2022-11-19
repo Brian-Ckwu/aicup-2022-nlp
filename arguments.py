@@ -132,10 +132,12 @@ class ExperimentArgs(Args):
         preprocess_args: PreprocessArgs,
         model_args: ModelArgs,
         train_args: MyTrainingArguments,
-        wandb_args: WAndBArgs
+        wandb_args: WAndBArgs,
+        cross_validation_idx: int = None,
     ):
         self.file_args = file_args
         self.preprocess_args = preprocess_args
         self.model_args = model_args
         self.train_args = train_args
         self.wandb_args = wandb_args
+        self.cross_validation_idx = cross_validation_idx
