@@ -8,6 +8,7 @@ from preprocess import Preprocessor
 
 class BertEncoderNetDataset(Dataset):
     ignore_index = -100
+    minimum_length_for_bigbird = 1024
 
     def __init__(self, r_data: pd.DataFrame, preprocessor: Preprocessor, do_eval: bool = False): # r_data: raw data
         self.r_data = r_data
@@ -50,7 +51,10 @@ class BertEncoderNetDataset(Dataset):
     
     def pad_and_truncate(self, seq_l: List[List[int]], pad_id: int, eos_id: int = None) -> List[List[int]]:
         new_seq_l = list()
-        max_len = min(self.preprocessor.model_tokenizer.model_max_length, max([len(seq) for seq in seq_l]))
+        if "bigbird" in self.preprocessor.model_tokenizer.name_or_path:
+            max_len = min(self.preprocessor.model_tokenizer.model_max_length, max([len(seq) for seq in seq_l] + [self.minimum_length_for_bigbird]))
+        else:
+            max_len = min(self.preprocessor.model_tokenizer.model_max_length, max([len(seq) for seq in seq_l]))
         for seq in seq_l:
             if len(seq) > max_len: # truncate
                 new_seq = seq[:max_len - 1] + [eos_id if eos_id is not None else pad_id]
