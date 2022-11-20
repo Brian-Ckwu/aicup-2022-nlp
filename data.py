@@ -42,6 +42,9 @@ class BertEncoderNetDataset(Dataset):
             "token_type_ids": self.make_token_type_ids(input_ids),
             "attention_mask": self.make_attention_mask(input_ids)
         }
+        if self.preprocessor.model_tokenizer.name_or_path == "roberta-large":
+            batch_X.pop("token_type_ids") # RoBERTa models have no token_type_ids
+
         batch_y_cls_l = torch.LongTensor(y_cls_l)
         batch_y_seq_l = torch.LongTensor(y_seq_l)
         return {
