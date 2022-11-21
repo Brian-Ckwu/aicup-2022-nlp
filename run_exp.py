@@ -35,6 +35,8 @@ class Experiment(object):
             w_loss_seq=args.model_args.w_loss_seq
         )
         self.wandb_run = wandb.init(reinit=True, **vars(args.wandb_args))
+        if self.args.cross_validation_idx is not None:
+            self.split_ids = self.split_ids[self.args.cross_validation_idx]
 
     def run(self, debug_mode: bool): # debug_mode --> forward a small proportion of samples (e.g., 10 - 100)
         # Load data
@@ -43,8 +45,8 @@ class Experiment(object):
             data = data[:self.debug_nsamples]
 
         # Split into train/valid/test by ID
-        train_data, valid_data, test_data = [data[data.id.isin(self.split_ids[split])] for split in ["train", "valid", "test"]]
-        print(f"Sample size: train = {len(train_data)} / valid = {len(valid_data)} / test = {len(test_data)}")
+        train_data, valid_data = [data[data.id.isin(self.split_ids[split])] for split in ["train", "valid"]]
+        print(f"Sample size: train = {len(train_data)} / valid = {len(valid_data)}")
         
         # Make datasets
         print("Building datasets...")
@@ -68,73 +70,82 @@ class Experiment(object):
         trainer.evaluate() # evaluate before any training
         trainer.train()
 
-        # TODO: Testing
-            # post-processing
-            # LCS
-
         self.wandb_run.summary["best_agg_lcs_score"] = trainer.state.best_metric
         self.wandb_run.finish()
         print(f"===== Best model checkpoint: {trainer.state.best_model_checkpoint} =====")
         (Path(self.args.train_args.output_dir) / "best_model_checkpoint.txt").write_text(trainer.state.best_model_checkpoint)
 
-# Experiment Arguments
-exp_name = "debug_run_for_save_ckpt"
-exp_args = ExperimentArgs(
-    file_args=FileArgs(
-        data_path="./dataset/train.csv",
-        split_ids_path="./dataset/splitIds__splitBy-id_stratifyBy-s_train-0.6_valid-0.2_test-0.2_seed-42.json"
-    ),
-    preprocess_args=PreprocessArgs(
-        use_nltk=False,
-        model_tokenizer_name="bert-base-uncased",
-        input_scheme="qrs",
-        output_scheme="q'r'",
-        labeling_scheme="IO1"
-    ),
-    model_args=ModelArgs(
-        model_type="bert",
-        model_name="bert-base-uncased",
-        w_loss_cls=None,
-        w_loss_seq=None,
-        checkpoint=None
-    ),
-    train_args=MyTrainingArguments(
-        num_train_epochs=5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
-        gradient_accumulation_steps=1,
-        learning_rate=3e-5,
-        lr_scheduler_type="linear",
-        warmup_ratio=0.0,
-        seed=42,
-
-        evaluation_strategy="epoch",
-        # eval_steps=20,
-        my_eval_metric_in_training="token_acc",
-        logging_strategy="epoch",
-        logging_first_step=True,
-        # logging_steps=20,
-        output_dir=f"./experiments/{exp_name}",
-        overwrite_output_dir=True, # NOTE
-        save_strategy="epoch",
-        save_total_limit=5,
-        # save_on_each_node=True,
-
-        fp16=False,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_agg_lcs_score",
-        greater_is_better=True,
-        
-        device_str="cuda:0",
-    ),
-    wandb_args=WAndBArgs(
-        project="aicup",
-        name=exp_name,
-        tags=["debug", "baseline"],
-        group="bert"
-    ),
-)
-
 if __name__ == "__main__":
-    exp = Experiment(exp_args)
-    exp.run(debug_mode=True) # -> save experiment arguments and results to a specified directory
+    mode = "submission"
+    model_size = "large"
+    huggingface_model = f"roberta-{model_size}"
+    strategy = "steps"
+    steps = 500
+    input_scheme = "qrs"
+    device = "cuda:0"
+
+    lr = 3e-5
+    n_splits = 5
+    seeds = [5, 6, 7, 8, 9]
+    for seed in seeds:
+        for cv_idx in range(n_splits):
+            print(f"\nCurrently cross validation @seed-{seed}/split-{cv_idx}:")
+            exp_name = f"{mode}_run_{huggingface_model}_cvseed-{seed}_split-{cv_idx}"
+            exp_args = ExperimentArgs(
+                file_args=FileArgs(
+                    data_path="./dataset/train.csv",
+                    split_ids_path=f"./dataset/cross_validation/final_submission/splitIds__nsplits-5_seed-{seed}.json"
+                ),
+                preprocess_args=PreprocessArgs(
+                    use_nltk=False,
+                    model_tokenizer_name=huggingface_model,
+                    input_scheme=input_scheme,
+                    output_scheme="q'r'",
+                    labeling_scheme="IO1"
+                ),
+                model_args=ModelArgs(
+                    model_type="bert",
+                    model_name=huggingface_model,
+                    w_loss_cls=None,
+                    w_loss_seq=None,
+                    checkpoint=None
+                ),
+                train_args=MyTrainingArguments(
+                    num_train_epochs=4,
+                    per_device_train_batch_size=4,
+                    per_device_eval_batch_size=8,
+                    gradient_accumulation_steps=4,
+                    learning_rate=lr,
+                    lr_scheduler_type="linear",
+                    warmup_ratio=0.0,
+                    seed=seed,
+
+                    evaluation_strategy=strategy,
+                    eval_steps=steps,
+                    my_eval_metric_in_training="token_acc",
+                    logging_strategy=strategy,
+                    logging_first_step=True,
+                    logging_steps=steps,
+                    output_dir=f"./submission/cross-validation/{huggingface_model}/cvseed-{seed}_idx-{cv_idx}",
+                    overwrite_output_dir=True, # NOTE
+                    save_strategy=strategy,
+                    save_total_limit=2,
+
+                    fp16=False,
+                    load_best_model_at_end=True,
+                    metric_for_best_model="eval_agg_lcs_score",
+                    greater_is_better=True,
+                    
+                    device_str=device,
+                ),
+                wandb_args=WAndBArgs(
+                    project="aicup",
+                    name=exp_name,
+                    tags=[mode, huggingface_model],
+                    group=f"{mode}-cv-seed-{seed}"
+                ),
+                cross_validation_idx=cv_idx
+            )
+
+            exp = Experiment(exp_args)
+            exp.run(debug_mode=(mode == "debug")) # -> save experiment arguments and results to a specified directory
