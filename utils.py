@@ -1,5 +1,5 @@
 import json
-from typing import Dict
+from typing import Dict, List
 from pathlib import Path
 
 import pandas as pd
@@ -76,6 +76,44 @@ def compute_final_score(lcs_df: pd.DataFrame) -> float:
     if (final_score < 0) or (final_score > 1):
         raise ValueError("The final score must be between 0 and 1, please check the implementation.")
     return final_score
+
+def get_default_pred_df(r_data: pd.DataFrame):
+    return r_data[["id", "q", "r"]].rename({"q": "q'", "r": "r'"}, axis=1).groupby("id").sample()
+
+def get_interval2ids(p_data: pd.DataFrame) -> Dict[tuple, List[int]]:
+    ntoken_intervals = [(0, 8)] + [(8 * 2 ** i, 8 * 2 ** (i + 1)) for i in range(9)] + [(4096, 10000)]
+    ntokens = p_data.X.apply(len)
+    interval2ids = {ntoken: list() for ntoken in ntoken_intervals}
+    for interval in ntoken_intervals:
+        low, high = interval
+        indices = ntokens[(low < ntokens) & (ntokens <= high)].index
+        ids = p_data.loc[indices].id.unique().tolist()
+        interval2ids[interval] = ids
+
+    return interval2ids
+
+def get_max_lcs_df(lcs_df):
+    lcs_df["total_scores"] = lcs_df["qp_scores"] + lcs_df["rp_scores"]
+    max_scores = lcs_df.groupby("id")["total_scores"].max()
+    return max_scores / 2
+
+def calc_interval2score(pred_df: pd.DataFrame, ans_df: pd.DataFrame, interval2ids: Dict[tuple, List[int]]) -> Dict[tuple, float]:
+    lcs_df = compute_lcs_scores(pred_df, ans_df)
+    max_lcs_df = get_max_lcs_df(lcs_df)
+
+    interval2score = dict()
+    for interval, ids in interval2ids.items():
+        score = max_lcs_df[max_lcs_df.index.isin(ids)].mean()
+        interval2score[interval] = score
+
+    return interval2score
+
+def calc_default_interval2score(r_data: pd.DataFrame, p_data: pd.DataFrame) -> Dict[tuple, float]:
+    pred_df = get_default_pred_df(r_data)
+    ans_df = r_data[["id", "q'", "r'"]]
+    interval2ids = get_interval2ids(p_data)
+    interval2score = calc_interval2score(pred_df, ans_df, interval2ids)
+    return interval2score
 
 compute_metrics_funcs = {
     "token_acc": compute_token_acc
