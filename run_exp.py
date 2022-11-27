@@ -76,25 +76,31 @@ class Experiment(object):
         (Path(self.args.train_args.output_dir) / "best_model_checkpoint.txt").write_text(trainer.state.best_model_checkpoint)
 
 if __name__ == "__main__":
+    # Variables
     mode = "submission"
     model_size = "large"
     huggingface_model = f"roberta-{model_size}"
-    strategy = "steps"
     steps = 500
+    lr = 2e-5
+    warmup_ratio = 0.06
+    seeds = range(5, 10)
     input_scheme = "qrs"
-    device = "cuda:0"
+    device = "cuda:1"
 
-    lr = 3e-5
+    # Automatically assigned constants
+    cv_mode = "submission" if mode == "submission" else "experiments"
+    cv_type = "final_submission" if mode == "submission" else "our_testing"
+    strategy = "epoch" if mode == "debug" else "steps"
     n_splits = 5
-    seeds = [5, 6, 7, 8, 9]
+
     for seed in seeds:
         for cv_idx in range(n_splits):
             print(f"\nCurrently cross validation @seed-{seed}/split-{cv_idx}:")
-            exp_name = f"{mode}_run_{huggingface_model}_cvseed-{seed}_split-{cv_idx}"
+            exp_name = f"{mode}_run_{huggingface_model}_cvseed-{seed}_split-{cv_idx}_lr-{lr}_warmup-{int(warmup_ratio * 100)}pct"
             exp_args = ExperimentArgs(
                 file_args=FileArgs(
                     data_path="./dataset/train.csv",
-                    split_ids_path=f"./dataset/cross_validation/final_submission/splitIds__nsplits-5_seed-{seed}.json"
+                    split_ids_path=f"./dataset/cross_validation/{cv_type}/splitIds__nsplits-5_seed-{seed}.json"
                 ),
                 preprocess_args=PreprocessArgs(
                     use_nltk=False,
@@ -117,7 +123,7 @@ if __name__ == "__main__":
                     gradient_accumulation_steps=4,
                     learning_rate=lr,
                     lr_scheduler_type="linear",
-                    warmup_ratio=0.0,
+                    warmup_ratio=warmup_ratio,
                     seed=seed,
 
                     evaluation_strategy=strategy,
@@ -126,7 +132,7 @@ if __name__ == "__main__":
                     logging_strategy=strategy,
                     logging_first_step=True,
                     logging_steps=steps,
-                    output_dir=f"./submission/cross-validation/{huggingface_model}/cvseed-{seed}_idx-{cv_idx}",
+                    output_dir=f"./{cv_mode}/cross-validation/{huggingface_model}/cvseed-{seed}_idx-{cv_idx}_lr-{lr}_warmup-{int(warmup_ratio * 100)}pct",
                     overwrite_output_dir=True, # NOTE
                     save_strategy=strategy,
                     save_total_limit=2,
@@ -142,7 +148,7 @@ if __name__ == "__main__":
                     project="aicup",
                     name=exp_name,
                     tags=[mode, huggingface_model],
-                    group=f"{mode}-cv-seed-{seed}"
+                    group=f"{mode}-cv-seed-{seed}_lr-{lr}_warmup-{int(warmup_ratio * 100)}pct"
                 ),
                 cross_validation_idx=cv_idx
             )
