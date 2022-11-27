@@ -36,10 +36,14 @@ class Preprocessor(object):
     }
     ignore_index_symbol = 'X'
     ignore_index = -100
+    default_model_max_length = 512
 
     def __init__(self, args: PreprocessArgs):
         self.args = args
         self.model_tokenizer = AutoTokenizer.from_pretrained(args.model_tokenizer_name)
+
+        if self.model_tokenizer.model_max_length > 1e8: # i.e., no model max length is specified
+            self.model_tokenizer.model_max_length = self.default_model_max_length
 
     # TODO: how to design the default preprocessing function?
     def __call__(self, data: pd.DataFrame) -> pd.DataFrame: # converted DataFrame consists of X & y
