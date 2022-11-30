@@ -2,11 +2,16 @@ import json
 from typing import Dict, List
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from transformers import EvalPrediction
 
 from preprocess import Preprocessor
+from postprocess import Postprocessor
 
 def load_json(file: str):
     return json.loads(Path(file).read_bytes())
@@ -118,6 +123,74 @@ def calc_default_interval2score(r_data: pd.DataFrame, p_data: pd.DataFrame) -> D
 compute_metrics_funcs = {
     "token_acc": compute_token_acc
 }
+
+def ensemble_model_outputs(
+    dataset, 
+    trainer, 
+    model: nn.Module, 
+    model_ckpt_paths: List[str], 
+    strategy: str, 
+    device
+):
+    
+    def sum_outputs(outputs_l: List[np.ndarray]) -> np.ndarray:
+        summed = None
+        for outputs in outputs_l:
+            if summed is None:
+                summed = outputs
+            else:
+                summed = summed + outputs
+        return summed
+
+    def sum_token_masks(logits_l: List[np.ndarray]) -> np.ndarray:
+        summed = None
+        for logits in logits_l:
+            token_mask = logits.argmax(axis=-1)
+            if summed is None:
+                summed = token_mask
+            else:
+                summed = summed + token_mask
+        return summed
+    
+    model_logits_l = list()
+    for model_ckpt_path in model_ckpt_paths:
+        print(f"----- Predicting outputs using checkpoint: {model_ckpt_path} -----")
+        model.load_state_dict(torch.load(Path(model_ckpt_path) / "pytorch_model.bin", map_location=device))
+
+        test_outputs = trainer.predict(dataset)
+        logits = test_outputs.predictions
+        model_logits_l.append(logits)
+
+    if strategy == "logits":
+        ensembled_logits = sum_outputs(model_logits_l)
+        pred_token_mask_l = ensembled_logits.argmax(axis=-1)
+    elif strategy == "softmax":
+        model_softmax_l = [F.softmax(torch.tensor(model_logits), dim=-1) for model_logits in model_logits_l]
+        ensembled_softmax = sum_outputs(model_softmax_l)
+        pred_token_mask_l = ensembled_softmax.argmax(axis=-1)
+    elif strategy == "voting":
+        voting_threshold = len(model_ckpt_paths) // 2
+        summed_token_mask = sum_token_masks(model_logits_l)
+        pred_token_mask_l = torch.tensor(summed_token_mask > voting_threshold).int()
+    else:
+        raise ValueError("'strategy' must be 'logits', 'softmax', or 'voting'")
+    
+    return pred_token_mask_l
+
+def calc_ensemble_score(dataset, pred_token_mask_l, return_lcs_df: bool = False) -> tuple:
+    pred_sents = Postprocessor.predict_sents(dataset, pred_token_mask_l)
+
+    ids = dataset.p_data.id.unique().tolist()
+
+    pred_df = pd.DataFrame(data={
+        "id": ids,
+        **pred_sents
+    })
+    ans_df = dataset.r_data[["id", "q'", "r'"]]
+
+    lcs_df = compute_lcs_scores(pred_df, ans_df)
+    ensemble_score = compute_final_score(lcs_df)
+    return ensemble_score if not return_lcs_df else (ensemble_score, lcs_df)
 
 # for unit testing
 if __name__ == "__main__":

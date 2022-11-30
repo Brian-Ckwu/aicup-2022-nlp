@@ -9,13 +9,12 @@ from argparse import Namespace, ArgumentParser
 import pandas as pd
 
 import torch
-import torch.nn as nn
 from transformers import logging
 logging.set_verbosity_error()
 
 from data import BertEncoderNetDataset
 from model import BertEncoderNet
-from utils import compute_lcs_scores, compute_final_score, load_json
+from utils import ensemble_model_outputs
 from trainer import BertEncoderNetTrainer
 from arguments import PreprocessArgs, MyTrainingArguments
 from preprocess import Preprocessor
@@ -77,7 +76,6 @@ def make_prediction_file(args: Namespace) -> None:
         num_tags=len(Preprocessor.scheme2tags[preprocess_args.labeling_scheme]),
         multitask=(preprocess_args.output_scheme == "sq'r'"),
     )
-    model.load_state_dict(torch.load(args.ckpt_path / "pytorch_model.bin", map_location=args.device))
 
     # Trainer
     trainer = BertEncoderNetTrainer(
@@ -90,10 +88,26 @@ def make_prediction_file(args: Namespace) -> None:
 
     # Inference
     print("Making inference...")
-    test_outputs = trainer.predict(dataset)
-    pred_token_mask_l = test_outputs.predictions.argmax(axis=-1)
-    pred_sents = Postprocessor.predict_sents(dataset, pred_token_mask_l)
 
+    if args.ensemble:
+        print(f"Ensembling using strategy '{args.ensemble_strategy}'...")
+        model_ckpt_paths = args.ckpt_paths_file.read_text().split('\n')
+        pred_token_mask_l = ensemble_model_outputs(
+            dataset,
+            trainer,
+            model,
+            model_ckpt_paths,
+            args.ensemble_strategy,
+            args.device
+        )
+    else:
+        model.load_state_dict(torch.load(args.ckpt_path / "pytorch_model.bin", map_location=args.device))
+        test_outputs = trainer.predict(dataset)
+        pred_token_mask_l = test_outputs.predictions.argmax(axis=-1)
+    
+    # Make the final prediction DataFrame
+    print("Making the final prediction DataFrame...")
+    pred_sents = Postprocessor.predict_sents(dataset, pred_token_mask_l)
     pred_df = pd.DataFrame(data={
         "id": dataset.p_data.id.unique().tolist(),
         **pred_sents
@@ -118,7 +132,21 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--ckpt_path",
         type=Path,
-        required=True
+        default=""
+    )
+    parser.add_argument(
+        "--ensemble",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--ensemble_strategy",
+        type=str,
+        default="logits"
+    )
+    parser.add_argument(
+        "--ckpt_paths_file",
+        type=Path,
+        default=""
     )
     parser.add_argument(
         "--file_name",
