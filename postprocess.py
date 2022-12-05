@@ -1,10 +1,44 @@
 from typing import List, Tuple
 
+import pandas as pd
 import torch
 
 from data import BertEncoderNetDataset
 
 class Postprocessor(object):
+
+    # TODO
+    @staticmethod
+    def merge_512_4096(df_512: pd.DataFrame, df_4096: pd.DataFrame) -> pd.DataFrame:
+        # make a copy
+        merged_df = df_512.copy()
+        # merge dataframes
+        raise NotImplementedError
+        # sanity check
+        return merged_df
+
+    # TODO
+    @staticmethod
+    def fill_empty_cells(pred_df: pd.DataFrame, orig_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+        pred_df = pred_df.sort_values(by="id").reset_index(drop=True)
+        orig_df = orig_df.sort_values(by="id").reset_index(drop=True)
+
+        if len(pred_df) != len(orig_df):
+            raise ValueError("The number of rows must be the same for both DataFrames.")
+
+        nchngs = 0
+        filled_df = pred_df.copy()
+        for i in filled_df.index.tolist():
+            for field in ['q', 'r']:
+                pred = filled_df.at[i, field]
+                if len(pred) <= 2:
+                    full = orig_df.at[i, field]
+                    filled_df.at[i, field] = full
+                    nchngs += 1
+                    if verbose:
+                        print(f"{nchngs}@({i}, {field}): {pred} -> {full}")
+        
+        return filled_df
 
     @staticmethod
     def aggregate_dataset_inputs(dataset):
