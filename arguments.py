@@ -20,9 +20,11 @@ class PreprocessArgs(Args):
         input_scheme: str, # qr | qrs
         output_scheme: str, # q'r' | sq'r'
         labeling_scheme: str, # IO1 | IO2 | BIO1 | BIO2
+        filter_long_text: bool
     ):
         self.use_nltk = use_nltk
         self.model_tokenizer_name = model_tokenizer_name
+        self.filter_long_text = filter_long_text
         self.set_input_scheme(input_scheme)
         self.set_output_scheme(output_scheme)
         self.set_labeling_scheme(labeling_scheme)

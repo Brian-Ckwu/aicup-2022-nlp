@@ -28,7 +28,8 @@ def make_prediction_file(args: Namespace) -> None:
         model_tokenizer_name=args.model_name,
         input_scheme="qrs",
         output_scheme="q'r'",
-        labeling_scheme="IO1"
+        labeling_scheme="IO1",
+        filter_long_text=False
     )
 
     train_args = MyTrainingArguments(
