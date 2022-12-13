@@ -11,7 +11,7 @@ Run cells of **Initialization**, **Functions**, **Tokenizer**
 ### Train
 Run cells of **Model / Collator / Trainer**
 ### Predict for Evaluation
-Run cells of **Predict Answer from model checkpoints**
+Run cells of **Predict Answer from model checkpoints**<br />
 Remember to set <code>real_predict_test = 0</code>
 ### Evaluation
 Run cells of **Evaluation**, **Model combination test**
@@ -20,5 +20,5 @@ Run cells of **Predict Answer from model checkpoints**<br />
 Remember to set <code>real_predict_test = 1</code>
 
 ## Acknowledgement
-We used a pretrained-model: <https://huggingface.co/janeel/muppet-roberta-base-finetuned-squad/><br />
+We used pretrained-model from: <https://huggingface.co/janeel/muppet-roberta-base-finetuned-squad/><br />
 Part of the code is adjusted from: <https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb>
