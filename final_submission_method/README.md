@@ -19,6 +19,12 @@ Run cells of **Evaluation**, **Model combination test**
 Run cells of **Predict Answer from model checkpoints**<br />
 Remember to set <code>real_predict_test = 1</code>
 
+## Environment
+### OS : Ubuntu 20.04<br />
+### Language : Python 3.8.13<br />
+### Environment management system : conda<br />
+### Packages : PyTorch 1.13.0, Huggingface transformers 4.24.0, nltk 3.7, sklearn 1.1.3<br />
+
 ## Acknowledgement
 We used pretrained-model from: <https://huggingface.co/janeel/muppet-roberta-base-finetuned-squad/><br />
 Part of the code is adjusted from: <https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb>
